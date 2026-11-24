@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Calculate token probabilities and sentence perplexity with DistilGPT-2 in your browser.">
+  <meta name="theme-color" content="#000000">
+  <title>Perplexity Explorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+  <style>
+    :root {
+      color-scheme: dark;
+      scrollbar-color: var(--white) var(--black);
+      --black: #000;
+      --white: #fff;
+      --rule: rgb(255 255 255 / 0.23);
+      --control: rgb(255 255 255 / 0.48);
+      --sans: "Geist", system-ui, sans-serif;
+      --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    ::selection { background: rgb(255 255 255 / 0.28); color: var(--white); }
+    body {
+      margin: 0;
+      isolation: isolate;
+      background: var(--black);
+      color: var(--white);
+      font: 1rem/1.55 var(--sans);
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse 75% 64% at 50% 36%, rgb(255 255 255 / 0.085), transparent 75%),
+        radial-gradient(ellipse 54% 80% at 3% 100%, rgb(255 255 255 / 0.06), transparent 75%),
+        radial-gradient(ellipse 58% 52% at 100% -4%, rgb(255 255 255 / 0.055), transparent 72%);
+    }
+    .depth-scene {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .intro-stage {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      min-height: 100svh;
+      padding: 1rem;
+      text-align: center;
+      overflow: hidden;
+    }
+    .intro h1 {
+      margin: 0;
+      padding: 0.035em 0.06em 0.11em;
+      font-size: min(20vw, 31vh);
+      font-size: min(20vw, 31svh);
+      font-weight: 700;
+      line-height: 0.9;
+      letter-spacing: -0.06em;
+    }
+    .intro h1 span { display: block; }
+    .title-dust {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .intro-link {
+      position: absolute;
+      bottom: max(1.375rem, env(safe-area-inset-bottom));
+      color: var(--white);
+      text-underline-offset: 0.25em;
+      font-size: 0.875rem;
+    }
+    main {
+      width: min(100% - 2rem, 51rem);
+      min-height: 100vh;
+      min-height: 100svh;
+      margin: 0 auto clamp(1rem, 5vw, 3rem);
+      display: grid;
+      align-content: start;
+    }
+    main > section {
+      min-width: 0;
+      padding: clamp(1.5rem, 5vw, 2.5rem) 0;
+    }
+    main > section + section {
+      border-top: 1px solid var(--rule);
+    }
+    main > section:first-child { padding-top: 0.875rem; }
+    @media (prefers-reduced-motion: no-preference) {
+      :root { scroll-behavior: smooth; }
+      .intro[data-dust] h1 {
+        opacity: var(--title-opacity, 1);
+        mask-image: linear-gradient(
+          90deg,
+          transparent calc(var(--erode, -12%) - 10%),
+          #fff calc(var(--erode, -12%) + 10%)
+        );
+      }
+      main > section { opacity: var(--reveal, 1); }
+      main > section:focus-within { opacity: 1; }
+    }
+    h2 {
+      margin: 0;
+      font-size: 1.0625rem;
+      font-weight: 650;
+      letter-spacing: -0.015em;
+    }
+    p { margin: 0.625rem 0 0; }
+    .note { font-size: 0.9rem; }
+    .step-detail { margin-bottom: 1rem; }
+    textarea, button, select { font: inherit; }
+    textarea {
+      display: block;
+      width: 100%;
+      min-height: 6rem;
+      padding: 0.75rem 0.875rem;
+      resize: vertical;
+      color: var(--white);
+      background: var(--black);
+      border: 1px solid var(--control);
+      border-radius: 0.375rem;
+    }
+    textarea::placeholder { color: var(--white); opacity: 1; font-style: italic; }
+    button, select { min-height: 2.625rem; border-radius: 0.375rem; }
+    button {
+      background: var(--black);
+      border: 1px solid var(--control);
+      color: var(--white);
+      font-weight: 650;
+      padding: 0.45rem 1rem;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) { border-color: var(--white); }
+    button:disabled { cursor: wait; }
+    select {
+      appearance: none;
+      border: 1px solid var(--control);
+      color: var(--white);
+      background:
+        linear-gradient(45deg, var(--black) 50%, var(--white) 50%) right 0.9rem center / 0.3rem 0.3rem no-repeat,
+        linear-gradient(135deg, var(--white) 50%, var(--black) 50%) right 0.6rem center / 0.3rem 0.3rem no-repeat,
+        var(--black);
+      padding: 0.375rem 1.75rem 0.375rem 0.625rem;
+      font-size: 0.9rem;
+    }
+    :is(a, textarea, button, select, .table-wrap):focus-visible {
+      outline: 2px solid var(--white);
+      outline-offset: 3px;
+    }
+    .actions, .ranking {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 0.875rem;
+    }
+    .actions { margin-top: 0.75rem; }
+    #status { margin: 0; }
+    #status[data-error] { font-weight: 650; }
+    progress {
+      appearance: none;
+      display: block;
+      width: 100%;
+      height: 0.5rem;
+      margin-top: 0.75rem;
+      border: 1px solid var(--control);
+      background: var(--black);
+      color: var(--white);
+    }
+    progress::-webkit-progress-bar { background: var(--black); }
+    progress::-webkit-progress-value { background: var(--white); }
+    progress::-moz-progress-bar { background: var(--white); }
+    .formula {
+      display: block;
+      margin-top: 0.875rem;
+      padding: 0.125rem 0 0.125rem 0.875rem;
+      border-left: 1px solid var(--control);
+      color: var(--white);
+      font: 0.875rem/1.7 var(--mono);
+      overflow-wrap: anywhere;
+    }
+    .result { margin-top: 1rem; }
+    .metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem 2rem;
+      margin: 0 0 0.875rem;
+    }
+    .metrics dt { font-size: 0.9rem; }
+    .metrics dd {
+      margin: 0.125rem 0 0;
+      font: 600 1.375rem/1.3 var(--sans);
+      font-variant-numeric: tabular-nums;
+    }
+    .table-wrap {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      font-variant-numeric: tabular-nums;
+    }
+    th, td {
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      white-space: nowrap;
+    }
+    th {
+      font-weight: 650;
+    }
+    td { border-top: 1px solid var(--rule); }
+    th:nth-child(1), td:nth-child(1) { width: 3rem; }
+    .number { text-align: right; }
+    .piece { font: 0.875rem var(--mono); }
+    .ranking { justify-content: space-between; margin-bottom: 0.5rem; }
+    .ranking label { font-weight: 650; font-size: 0.9rem; }
+    #ranking-note { margin-bottom: 0.625rem; }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <canvas class="depth-scene" aria-hidden="true"></canvas>
+  <header class="intro">
+    <div class="intro-stage">
+      <h1><span>Perplexity</span> <span>Explorer</span></h1>
+      <canvas class="title-dust" aria-hidden="true" hidden></canvas>
+      <a class="intro-link" href="#calculator-content">Scroll to calculator</a>
+    </div>
+  </header>
+  <main id="calculator-content" tabindex="-1">
+    <section aria-labelledby="input-title">
+      <h2 id="input-title">1. Enter a sentence</h2>
+      <p class="note step-detail" id="input-note">DistilGPT-2 splits text into tokens, which can be words, word pieces, punctuation, or spaces. The first run downloads the model (about 85 MB) and runs it in your browser.</p>
+      <form id="calculator">
+        <label class="visually-hidden" for="sentence">Sentence</label>
+        <textarea id="sentence" required rows="3" spellcheck="false" aria-describedby="input-note" placeholder="Example: The capital of France is"></textarea>
+        <div class="actions">
+          <button type="submit" id="calculate">Calculate</button>
+          <p class="note" id="status" role="status" aria-live="polite"></p>
+        </div>
+        <progress id="download" max="100" aria-label="Model download" hidden></progress>
+      </form>
+      <noscript><p>Enable JavaScript to run DistilGPT-2 in this page.</p></noscript>
+    </section>
+
+    <section aria-labelledby="score-title">
+      <h2 id="score-title">2. Score each input token</h2>
+      <p class="note">DistilGPT-2 predicts each token from the ones before it. A start marker supplies the context for the first token. Softmax turns the model’s raw scores (logits) into probabilities.</p>
+      <code class="formula">pᵢ = softmax(logits from the preceding context)[tokenᵢ]<br>Token perplexity qᵢ = 1 / pᵢ<br>Sentence perplexity = (q₁ × q₂ × … × qₙ)<sup>1/n</sup></code>
+      <p class="note">The sentence score is the geometric mean of the token scores, where n is the number of input tokens. Lower perplexity means the model found the text easier to predict.</p>
+      <div class="result" id="score-result" hidden>
+        <dl class="metrics">
+          <div><dt>Sentence perplexity</dt><dd id="sentence-ppl"></dd></div>
+          <div><dt>Input tokens</dt><dd id="token-count"></dd></div>
+        </dl>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Input token scores">
+          <table>
+            <thead><tr><th scope="col">#</th><th scope="col">Token</th><th scope="col" class="number">Probability</th><th scope="col" class="number">Perplexity</th></tr></thead>
+            <tbody id="input-rows"></tbody>
+          </table>
+        </div>
+        <p class="note">In the tables, · marks a space and ↵ marks a line break.</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="predict-title">
+      <h2 id="predict-title">3. Predict the next token</h2>
+      <p class="note">The last position gives probabilities for every possible next token. Before a continuation is known, exp(H) measures the model’s uncertainty across those possibilities.</p>
+      <code class="formula">H = −Σ pⱼ ln(pⱼ) across the vocabulary<br>Next-token distribution perplexity = exp(H)</code>
+      <div class="result" id="predict-result" hidden>
+        <dl class="metrics">
+          <div><dt>Next-token distribution perplexity</dt><dd id="next-ppl"></dd></div>
+        </dl>
+        <div class="ranking">
+          <label for="ranking-mode">Top 10 next predictions</label>
+          <select id="ranking-mode" aria-describedby="ranking-note">
+            <option value="words">Word-like tokens</option>
+            <option value="all">All tokens</option>
+          </select>
+        </div>
+        <p class="note" id="ranking-note"></p>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Ranked next token predictions">
+          <table>
+            <thead><tr><th scope="col">#</th><th scope="col">Token</th><th scope="col" class="number">Probability</th><th scope="col" class="number">Perplexity</th></tr></thead>
+            <tbody id="prediction-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const canvas = document.querySelector(".depth-scene");
+      const scene = canvas.getContext("2d");
+      if (!scene) return;
+
+      const motion = matchMedia("(prefers-reduced-motion: no-preference)");
+      const around = 80;
+      const across = 20;
+      const turn = Math.PI * 2;
+      const vertices = [];
+      const faces = [];
+      let frame = 0;
+      let previousDepth = -1;
+      let width = 0;
+      let height = 0;
+
+      // A corrugated ring, with one normal per surface patch for directional light.
+      function ringPoint(u, v) {
+        const tube = 0.29 + 0.024 * Math.cos(u * 20);
+        const radius = 1.18 + tube * Math.cos(v);
+        return [radius * Math.cos(u), radius * Math.sin(u), tube * Math.sin(v)];
+      }
+
+      for (let i = 0; i < around; i++) {
+        for (let j = 0; j < across; j++) {
+          vertices.push(ringPoint(i * turn / around, j * turn / across));
+          const u = (i + 0.5) * turn / around;
+          const v = (j + 0.5) * turn / across;
+          const slope = -0.48 * Math.sin(u * 20) / 1.18;
+          const normal = [
+            Math.cos(u) * Math.cos(v) + slope * Math.sin(u),
+            Math.sin(u) * Math.cos(v) - slope * Math.cos(u),
+            Math.sin(v),
+          ];
+          const size = Math.hypot(...normal);
+          const next = (i + 1) % around * across;
+          const right = (j + 1) % across;
+          faces.push({
+            corners: [i * across + j, next + j, next + right, i * across + right],
+            normal: normal.map(value => value / size),
+          });
+        }
+      }
+
+      function drawGrid(depth) {
+        const horizon = height * (0.62 + depth * 0.08);
+        const floor = height - horizon;
+        const origin = width * (0.58 + depth * 0.08);
+        const fade = scene.createLinearGradient(0, horizon, 0, height);
+        fade.addColorStop(0, "rgb(255 255 255 / 0)");
+        fade.addColorStop(1, "rgb(255 255 255 / 0.10)");
+        scene.strokeStyle = fade;
+        scene.lineWidth = 1;
+        scene.beginPath();
+        for (let line = -10; line <= 10; line++) {
+          scene.moveTo(origin + line * width * 0.01, horizon);
+          scene.lineTo(origin + line * width * 0.19, height);
+        }
+        for (let row = 1; row <= 8; row++) {
+          const y = horizon + floor * (row / 9) ** 2.2;
+          scene.moveTo(0, y);
+          scene.lineTo(width, y);
+        }
+        scene.stroke();
+      }
+
+      function drawRing(depth) {
+        const tilt = 0.88 - depth * 0.15;
+        const twist = -0.34 + depth * 0.22;
+        const turnX = Math.cos(tilt);
+        const turnY = Math.sin(tilt);
+        const rollX = Math.cos(twist);
+        const rollY = Math.sin(twist);
+        const camera = 5;
+        const scale = Math.min(Math.max(width * 0.34, height * 0.24), height * 0.43);
+        const centerX = width * (0.91 + depth * 0.18);
+        const centerY = height * (0.26 - depth * 0.09);
+
+        function rotate([x, y, z]) {
+          const up = y * turnX - z * turnY;
+          return [x * rollX - up * rollY, x * rollY + up * rollX, y * turnY + z * turnX];
+        }
+
+        const points = vertices.map(rotate);
+        const projected = points.map(([x, y, z]) => {
+          const lens = scale * camera / (camera - z);
+          return [centerX + x * lens, centerY + y * lens];
+        });
+
+        const visible = [];
+        for (const face of faces) {
+          const [nx, ny, nz] = rotate(face.normal);
+          const [x, y, z] = points[face.corners[0]];
+          if (nz * (camera - z) - nx * x - ny * y <= 0) continue;
+          const light = Math.max(0, -0.48 * nx - 0.56 * ny + 0.68 * nz);
+          const glint = Math.max(0, -0.28 * nx - 0.33 * ny + 0.9 * nz) ** 20;
+          const shade = Math.round(4 + 27 * light ** 1.6 + 34 * glint);
+          const distance = face.corners.reduce((sum, corner) => sum + points[corner][2], 0) / 4;
+          visible.push({ distance, shade, corners: face.corners });
+        }
+
+        visible.sort((first, second) => first.distance - second.distance);
+        scene.globalAlpha = 1 - depth * 0.34;
+        scene.lineWidth = 0.8;
+        scene.lineJoin = "round";
+        for (const { shade, corners } of visible) {
+          scene.beginPath();
+          scene.moveTo(...projected[corners[0]]);
+          for (const corner of corners.slice(1)) scene.lineTo(...projected[corner]);
+          scene.closePath();
+          scene.fillStyle = scene.strokeStyle = "rgb(" + shade + " " + shade + " " + shade + ")";
+          scene.fill();
+          scene.stroke();
+        }
+        scene.globalAlpha = 1;
+      }
+
+      function render() {
+        frame = 0;
+        if (!width || !height) return;
+        const depth = motion.matches ? Math.min(1, Math.max(0, window.scrollY / height)) : 0;
+        if (depth === previousDepth) return;
+        previousDepth = depth;
+        scene.clearRect(0, 0, width, height);
+        drawGrid(depth);
+        drawRing(depth);
+      }
+
+      function schedule() {
+        if (!frame) frame = requestAnimationFrame(render);
+      }
+
+      function resize() {
+        width = canvas.clientWidth;
+        height = canvas.clientHeight;
+        const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+        scene.setTransform(ratio, 0, 0, ratio, 0, 0);
+        previousDepth = -1;
+        schedule();
+      }
+
+      window.addEventListener("scroll", schedule, { passive: true });
+      window.addEventListener("resize", resize);
+      motion.addEventListener("change", schedule);
+      resize();
+    })();
+  </script>
+  <script>
+    const intro = document.querySelector(".intro");
+    const stage = intro.querySelector(".intro-stage");
+    const title = stage.querySelector("h1");
+    const dust = stage.querySelector("canvas");
+    const dustContext = dust.getContext("2d");
+    const motion = matchMedia("(prefers-reduced-motion: no-preference)");
+    const calculatorContent = document.getElementById("calculator-content");
+    const steps = calculatorContent.querySelectorAll("section");
+    const clamp = (value) => Math.max(0, Math.min(1, value));
+    let revealFrame = 0;
+    let grains;
+
+    function makeDust() {
+      const stageBox = stage.getBoundingClientRect();
+      const titleBox = title.getBoundingClientRect();
+      const width = stage.clientWidth;
+      const height = stage.clientHeight;
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      dust.width = Math.round(width * ratio);
+      dust.height = Math.round(height * ratio);
+      dustContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+      dustContext.fillStyle = "#fff";
+
+      // Sample the rendered letter shapes so each grain starts inside a glyph.
+      const mask = document.createElement("canvas");
+      mask.width = width;
+      mask.height = height;
+      const ink = mask.getContext("2d", { willReadFrequently: true });
+      const font = getComputedStyle(title);
+      ink.font = font.fontWeight + " " + font.fontSize + " " + font.fontFamily;
+      const metrics = ink.measureText("Hg");
+      const ascent = metrics.fontBoundingBoxAscent ?? parseFloat(font.fontSize) * 0.8;
+      const descent = metrics.fontBoundingBoxDescent ?? parseFloat(font.fontSize) * 0.2;
+      const glyph = document.createRange();
+      for (const line of title.children) {
+        const box = line.getBoundingClientRect();
+        const baseline = box.top - stageBox.top + (box.height + ascent - descent) / 2;
+        const word = line.firstChild;
+        for (let i = 0; i < word.length; i++) {
+          glyph.setStart(word, i);
+          glyph.setEnd(word, i + 1);
+          ink.fillText(word.data[i], glyph.getBoundingClientRect().left - stageBox.left, baseline);
+        }
+      }
+
+      const { data } = ink.getImageData(0, 0, width, height);
+      const stride = Math.max(3, Math.ceil(Math.sqrt(width * height / 30000)));
+      const left = titleBox.left - stageBox.left;
+      const random = Math.random;
+      const particles = [];
+      for (let row = 0; row < height; row += stride) {
+        for (let column = 0; column < width; column += stride) {
+          const x = Math.min(width - 1, column + Math.floor(random() * stride));
+          const y = Math.min(height - 1, row + Math.floor(random() * stride));
+          if (data[(y * width + x) * 4 + 3] < 128) continue;
+
+          const start = 0.035 + clamp((x - left) / titleBox.width) * 0.72 + random() * 0.085;
+          particles.push({
+            x, y, start,
+            lifetime: Math.min(1 - start, 0.28 + random() * 0.25),
+            drift: (random() - 0.3) * Math.min(width * 0.5, 260),
+            rise: 30 + random() * Math.min(height * 0.38, 300),
+            size: 0.65 + random() ** 2 * 1.9,
+            brightness: 0.38 + random() * 0.62,
+          });
+        }
+      }
+      return particles;
+    }
+
+    function updateTitle() {
+      if (!intro.hasAttribute("data-dust")) {
+        dust.hidden = true;
+        return;
+      }
+      const distance = stage.clientHeight * 0.82;
+      const progress = clamp(-intro.getBoundingClientRect().top / Math.max(1, distance));
+      title.style.setProperty("--erode", (-12 + progress * 125) + "%");
+      title.style.setProperty("--title-opacity", 1 - progress ** 3);
+      dust.hidden = progress === 0 || progress === 1;
+      if (dust.hidden) return;
+
+      grains ??= makeDust();
+      dustContext.clearRect(0, 0, stage.clientWidth, stage.clientHeight);
+      for (const grain of grains) {
+        const age = (progress - grain.start) / grain.lifetime;
+        if (age <= 0 || age >= 1) continue;
+        const travel = age * (0.4 + 0.6 * age);
+        dustContext.globalAlpha = Math.min(age * 14, 1) * (1 - age) * grain.brightness;
+        dustContext.fillRect(
+          grain.x + grain.drift * travel,
+          grain.y - grain.rise * travel,
+          grain.size,
+          grain.size,
+        );
+      }
+    }
+
+    function updateReveal() {
+      revealFrame = 0;
+      updateTitle();
+      const page = document.documentElement;
+      const viewport = page.clientHeight;
+      const remaining = Math.max(0, page.scrollHeight - viewport - window.scrollY);
+      for (const step of steps) {
+        const top = step.getBoundingClientRect().top;
+        // Short sections near the bottom must finish fading by the last scroll position.
+        const fullyVisibleAt = Math.max(viewport * 0.55, top - remaining);
+        const progress = clamp((viewport - top) / Math.max(1, viewport - fullyVisibleAt));
+        step.style.setProperty("--reveal", 1 - (1 - progress) ** 2);
+      }
+    }
+
+    function queueReveal() {
+      if (!revealFrame) revealFrame = requestAnimationFrame(updateReveal);
+    }
+
+    function refreshDust() {
+      grains = undefined;
+      queueReveal();
+    }
+
+    function syncMotion() {
+      intro.toggleAttribute("data-dust", motion.matches && Boolean(dustContext));
+      refreshDust();
+    }
+
+    window.addEventListener("scroll", queueReveal, { passive: true });
+    window.addEventListener("resize", refreshDust);
+    motion.addEventListener("change", syncMotion);
+    new ResizeObserver(queueReveal).observe(calculatorContent);
+    document.fonts?.ready.then(refreshDust);
+    syncMotion();
+  </script>
+  <script>
+    const LIBRARY_URL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
+    const MODEL_ID = "Xenova/distilgpt2";
+    const byId = (id) => document.getElementById(id);
+    const form = byId("calculator");
+    const sentence = byId("sentence");
+    const calculate = byId("calculate");
+    const status = byId("status");
+    const download = byId("download");
+    const scoreResult = byId("score-result");
+    const predictResult = byId("predict-result");
+    const rankingMode = byId("ranking-mode");
+    const numberFormat = new Intl.NumberFormat("en", { maximumSignificantDigits: 5 });
+
+    let runtime;
+    let tokenizer;
+    let model;
+    let predictions;
+
+    function setStatus(message, isError = false) {
+      status.textContent = message;
+      status.toggleAttribute("data-error", isError);
+    }
+
+    function showModelProgress(event) {
+      if (!event.file?.endsWith(".onnx")) return;
+      if (event.status === "progress" && Number.isFinite(event.progress)) {
+        const percent = Math.min(100, Math.round(event.progress));
+        download.value = percent;
+        setStatus("Downloading DistilGPT-2… " + percent + "%");
+      } else if (event.status === "done") {
+        download.removeAttribute("value");
+        setStatus("Preparing DistilGPT-2…");
+      }
+    }
+
+    // Work in log space so tiny probabilities still give accurate perplexities.
+    function logNormalizer(logits) {
+      let max = -Infinity;
+      for (const logit of logits) max = Math.max(max, logit);
+      let sum = 0;
+      for (const logit of logits) sum += Math.exp(logit - max);
+      return max + Math.log(sum);
+    }
+
+    function decodeToken(id) {
+      return tokenizer.decode([id], {
+        skip_special_tokens: false,
+        clean_up_tokenization_spaces: false,
+      });
+    }
+
+    function displayToken(id, decoded = decodeToken(id)) {
+      // A byte-level token can contain one part of a multibyte character.
+      const visible = decoded.includes("\uFFFD") ? (tokenizer.model.vocab[id] ?? decoded) : decoded;
+      return visible.replaceAll(" ", "·").replaceAll("\n", "↵")
+        .replaceAll("\r", "\\r").replaceAll("\t", "\\t") || "(empty)";
+    }
+
+    function analyzeLogits({ data, dims }, ids) {
+      const vocabSize = dims[2];
+      if (dims.length !== 3 || dims[0] !== 1 || dims[1] !== ids.length + 1) {
+        throw new Error("Unexpected model output shape.");
+      }
+
+      let sentencePerplexity = 1;
+      const tokens = ids.map((id, index) => {
+        const offset = index * vocabSize;
+        const logits = data.subarray(offset, offset + vocabSize);
+        const logProbability = logits[id] - logNormalizer(logits);
+        // Multiply the nth roots. Forming the full product first can overflow.
+        sentencePerplexity *= Math.exp(-logProbability / ids.length);
+        return { text: displayToken(id), logProbability };
+      });
+
+      const next = data.subarray(ids.length * vocabSize);
+      const normalizer = logNormalizer(next);
+      if (!Number.isFinite(sentencePerplexity) || !Number.isFinite(normalizer)) {
+        throw new Error("The model returned invalid scores.");
+      }
+
+      let entropy = 0;
+      const rankedIds = Array.from(next, (_, id) => id);
+      for (const logit of next) {
+        const logProbability = logit - normalizer;
+        if (Number.isFinite(logProbability)) {
+          entropy -= Math.exp(logProbability) * logProbability;
+        }
+      }
+      rankedIds.sort((a, b) => next[b] - next[a] || a - b);
+
+      const all = [];
+      const words = [];
+      const wordPattern = /^ ?\p{L}[\p{L}\p{M}]*(?:['’\-][\p{L}\p{M}]+)*$/u;
+      for (const id of rankedIds) {
+        const decoded = decodeToken(id);
+        const prediction = { text: displayToken(id, decoded), logProbability: next[id] - normalizer };
+        if (all.length < 10) all.push(prediction);
+        if (words.length < 10 && wordPattern.test(decoded)) words.push(prediction);
+        if (all.length === 10 && words.length === 10) break;
+      }
+
+      return {
+        tokens,
+        sentencePerplexity,
+        nextPerplexity: Math.exp(entropy),
+        predictions: { all, words },
+      };
+    }
+
+    function formatNumber(value) {
+      if (value > 0 && (value < 0.0001 || value >= 1e7)) return value.toExponential(3);
+      return numberFormat.format(value);
+    }
+
+    function renderRows(container, rows) {
+      const fragment = document.createDocumentFragment();
+      rows.forEach(({ text, logProbability }, index) => {
+        const row = document.createElement("tr");
+        const values = [
+          index + 1,
+          text,
+          formatNumber(100 * Math.exp(logProbability)) + "%",
+          formatNumber(Math.exp(-logProbability)),
+        ];
+        values.forEach((value, column) => {
+          const cell = row.insertCell();
+          cell.textContent = value;
+          if (column === 1) cell.className = "piece";
+          if (column > 1) cell.className = "number";
+        });
+        fragment.append(row);
+      });
+      container.replaceChildren(fragment);
+    }
+
+    function renderPredictions() {
+      const mode = rankingMode.value;
+      byId("ranking-note").textContent = mode === "words"
+        ? "This view ranks word-shaped tokens, including possible word pieces. Probabilities use the full vocabulary."
+        : "This view includes punctuation, spaces, and word pieces. Each candidate’s perplexity is 1 / p.";
+      renderRows(byId("prediction-rows"), predictions[mode]);
+    }
+
+    rankingMode.addEventListener("change", renderPredictions);
+    sentence.addEventListener("input", () => {
+      sentence.setCustomValidity("");
+      scoreResult.hidden = predictResult.hidden = true;
+      setStatus("");
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (calculate.disabled) return;
+
+      const input = sentence.value;
+      if (!input.trim()) {
+        sentence.setCustomValidity("Enter a sentence to calculate its perplexity.");
+        sentence.reportValidity();
+        return;
+      }
+
+      scoreResult.hidden = predictResult.hidden = true;
+      calculate.disabled = true;
+      sentence.readOnly = true;
+      let stage = "loading";
+
+      try {
+        if (!runtime) {
+          setStatus("Loading the browser runtime…");
+          runtime = await import(LIBRARY_URL);
+          runtime.env.allowLocalModels = false;
+          // One WASM thread works without cross-origin isolation or a local server.
+          runtime.env.backends.onnx.wasm.numThreads = 1;
+        }
+        if (!tokenizer) {
+          setStatus("Loading the tokenizer…");
+          tokenizer = await runtime.AutoTokenizer.from_pretrained(MODEL_ID);
+        }
+
+        const ids = tokenizer.encode(input, { add_special_tokens: false });
+        if (ids.length > 1023) {
+          setStatus("This input has " + ids.length + " tokens. Shorten it to 1,023 tokens or fewer.", true);
+          return;
+        }
+
+        if (!model) {
+          download.removeAttribute("value");
+          download.hidden = false;
+          setStatus("Loading DistilGPT-2…");
+          model = await runtime.AutoModelForCausalLM.from_pretrained(MODEL_ID, {
+            device: "wasm",
+            dtype: "q8",
+            model_file_name: "decoder_model_merged",
+            progress_callback: showModelProgress,
+          });
+        }
+
+        stage = "scoring";
+        download.hidden = true;
+        setStatus("Calculating probabilities…");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const inputIds = BigInt64Array.from([model.config.bos_token_id, ...ids], BigInt);
+        const attention = new BigInt64Array(inputIds.length).fill(1n);
+        // Logits at position i predict token i + 1, with BOS at position zero.
+        const { logits } = await model({
+          input_ids: new runtime.Tensor("int64", inputIds, [1, inputIds.length]),
+          attention_mask: new runtime.Tensor("int64", attention, [1, inputIds.length]),
+        });
+
+        const result = analyzeLogits(logits, ids);
+        predictions = result.predictions;
+        byId("sentence-ppl").textContent = formatNumber(result.sentencePerplexity);
+        byId("token-count").textContent = numberFormat.format(result.tokens.length);
+        byId("next-ppl").textContent = formatNumber(result.nextPerplexity);
+        renderRows(byId("input-rows"), result.tokens);
+        renderPredictions();
+        scoreResult.hidden = predictResult.hidden = false;
+        setStatus("Calculated " + result.tokens.length + " input token" + (result.tokens.length === 1 ? "." : "s."));
+      } catch (error) {
+        console.error(error);
+        setStatus(stage === "loading"
+          ? "DistilGPT-2 could not load. Check your internet connection and try again."
+          : "The model could not score this input. Try a shorter sentence or reload the page.", true);
+      } finally {
+        download.hidden = true;
+        calculate.disabled = false;
+        sentence.readOnly = false;
+      }
+    });
+  </script>
+</body>
+</html>
